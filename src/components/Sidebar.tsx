@@ -48,16 +48,12 @@ export default function Sidebar({
       {/* Brand Header */}
       <div className="p-6 border-b border-zinc-200 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-zinc-950 flex items-center justify-center text-white font-mono font-bold text-base tracking-tighter">
-            M
-          </div>
           <div>
-            <h1 className="text-sm font-bold tracking-tight text-zinc-950 uppercase">MazeForge 3D</h1>
-            <p className="text-[10px] text-zinc-400 font-mono font-semibold">CAD Tool for 3D Printing</p>
+            <h1 className="text-sm font-bold tracking-tight text-zinc-950 uppercase">MazeForge</h1>
           </div>
         </div>
         <div className="px-2.5 py-1 rounded-full bg-zinc-100 border border-zinc-200 text-[9px] font-mono text-zinc-500 font-extrabold">
-          PARAMETRIC GENERATOR
+          MAZE GENERATOR
         </div>
       </div>
 

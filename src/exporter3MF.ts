@@ -360,84 +360,46 @@ export function buildBoardMesh(grid: MazeGrid, specs: BoardSpecs, isPreview: boo
   const getCellCenterX = (c: number) => getCellLeft(c) + ChW / 2;
 
   // 3. Inner maze walls (from z = 7 to z = 15, centered at outerWallCenterZ)
-  // Vertical maze walls
+  // Vertical maze walls - length is exactly ChW (the cell's size), no messy overlapping extension
   for (let r = 0; r < N; r++) {
     for (let c = 0; c < N - 1; c++) {
       if (grid.verticalWalls[r][c]) {
         const xCenter = getCellLeft(c) + ChW + WaW / 2;
         const yCenter = getCellCenterY(r);
-        // We extend the length slightly (by WaW) so segments overlap at junctions perfectly!
-        meshes.push(generateBoxMesh(WaW, ChW + WaW, wallH, xCenter, yCenter, outerWallCenterZ));
+        meshes.push(generateBoxMesh(WaW, ChW, wallH, xCenter, yCenter, outerWallCenterZ));
       }
     }
   }
 
-  // Horizontal maze walls
+  // Horizontal maze walls - length is exactly ChW (the cell's size), no messy overlapping extension
   for (let r = 0; r < N - 1; r++) {
     for (let c = 0; c < N; c++) {
       if (grid.horizontalWalls[r][c]) {
         const xCenter = getCellCenterX(c);
         const yCenter = -S / 2 + margin + r * (ChW + WaW) + ChW + WaW / 2;
-        meshes.push(generateBoxMesh(ChW + WaW, WaW, wallH, xCenter, yCenter, outerWallCenterZ));
+        meshes.push(generateBoxMesh(ChW, WaW, wallH, xCenter, yCenter, outerWallCenterZ));
       }
     }
   }
 
-  // 3b. Add round internal filleted junction cylinders only at perpendicular wall turns
-  if (!isPreview) {
-    const junctionR = 2.0; // Consistent 2mm fillet radius
-    for (let r = 0; r < N - 1; r++) {
-      for (let c = 0; c < N - 1; c++) {
-        const isVerticalUpper = grid.verticalWalls[r][c];
-        const isVerticalLower = grid.verticalWalls[r + 1][c];
-        const isHorizontalLeft = grid.horizontalWalls[r][c];
-        const isHorizontalRight = grid.horizontalWalls[r][c + 1];
-
-        // Only place a fillet cylinder if there is a real perpendicular turn/intersection
-        const hasVertical = isVerticalUpper || isVerticalLower;
-        const hasHorizontal = isHorizontalLeft || isHorizontalRight;
-
-        if (hasVertical && hasHorizontal) {
-          const xCorner = getCellLeft(c) + ChW + WaW / 2;
-          const yCorner = -S / 2 + margin + r * (ChW + WaW) + ChW + WaW / 2;
-          meshes.push(generateCylinderMeshZ(junctionR, wallH, xCorner, yCorner, outerWallCenterZ, 16));
-        }
-      }
-    }
-
-    // Top border junctions filleting where vertical walls meet the top border
+  // Junction Pillars - placed perfectly at corners where at least one wall segment meets.
+  // This achieves perfect 90-degree flush corners without any jagged offsets or overlapping lines.
+  for (let r = 0; r < N - 1; r++) {
     for (let c = 0; c < N - 1; c++) {
-      if (grid.verticalWalls[0][c]) {
+      const wUT = grid.verticalWalls[r][c];       // Upper transition
+      const wLT = grid.verticalWalls[r + 1][c];   // Lower transition
+      const wLH = grid.horizontalWalls[r][c];     // Left transition
+      const wRH = grid.horizontalWalls[r][c + 1]; // Right transition
+
+      if (wUT || wLT || wLH || wRH) {
         const xCorner = getCellLeft(c) + ChW + WaW / 2;
-        const yCorner = -S / 2 + margin;
-        meshes.push(generateCylinderMeshZ(junctionR, wallH, xCorner, yCorner, outerWallCenterZ, 16));
-      }
-    }
-    // Bottom border junctions filleting where vertical walls meet the bottom border
-    for (let c = 0; c < N - 1; c++) {
-      if (grid.verticalWalls[N - 1][c]) {
-        const xCorner = getCellLeft(c) + ChW + WaW / 2;
-        const yCorner = S / 2 - margin;
-        meshes.push(generateCylinderMeshZ(junctionR, wallH, xCorner, yCorner, outerWallCenterZ, 16));
-      }
-    }
-    // Left border junctions filleting where horizontal walls meet the left border
-    for (let r = 0; r < N - 1; r++) {
-      if (grid.horizontalWalls[r][0]) {
-        const xCorner = -S / 2 + margin;
         const yCorner = -S / 2 + margin + r * (ChW + WaW) + ChW + WaW / 2;
-        meshes.push(generateCylinderMeshZ(junctionR, wallH, xCorner, yCorner, outerWallCenterZ, 16));
-      }
-    }
-    // Right border junctions filleting where horizontal walls meet the right border
-    for (let r = 0; r < N - 1; r++) {
-      if (grid.horizontalWalls[r][N - 1]) {
-        const xCorner = S / 2 - margin;
-        const yCorner = -S / 2 + margin + r * (ChW + WaW) + ChW + WaW / 2;
-        meshes.push(generateCylinderMeshZ(junctionR, wallH, xCorner, yCorner, outerWallCenterZ, 16));
+        meshes.push(generateBoxMesh(WaW, WaW, wallH, xCorner, yCorner, outerWallCenterZ));
       }
     }
   }
+
+  // 3b. Junction filleted cylinders (tiang-tiang) removed to ensure exported model matches the preview exactly.
 
   // 4. Handles on Left and Right (integrated cylinder + Rounded Square knob)
   const handleZ = totalT / 2;
@@ -562,9 +524,9 @@ export function exportToBinarySTL(mesh: RawMesh): Blob {
 }
 
 // Export to Wavefront OBJ format
-export function exportToOBJ(mesh: RawMesh, name: string = 'MazeForge3D'): string {
+export function exportToOBJ(mesh: RawMesh, name: string = 'Maze3D'): string {
   let obj = `# ${name} Export\n`;
-  obj += `# Generated by MazeForge 3D\n`;
+  obj += `# Generated by Maze3D\n`;
   obj += `o ${name}\n`;
 
   for (const v of mesh.vertices) {
@@ -583,7 +545,7 @@ export function exportToOBJ(mesh: RawMesh, name: string = 'MazeForge3D'): string
 function generate3MFModelXML(boardMesh: RawMesh, ballMesh: RawMesh): string {
   let xml = `<?xml version="1.0" encoding="UTF-8"?>
 <model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
-  <metadata name="Application">MazeForge 3D</metadata>
+  <metadata name="Application">Maze 3D</metadata>
   <metadata name="Title">3D Ball Maze Puzzle</metadata>
   <resources>
     <!-- Object 1: Maze Board -->

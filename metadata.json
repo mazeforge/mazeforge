@@ -1,5 +1,5 @@
 {
-  "name": "MazeForge 3D",
+  "name": "MazeForge",
   "description": "A parametric 3D Ball Maze Generator ready for 3D Printing. Generates fully custom solvable mazes, integrates high-fidelity real-time interactive physics previews, and exports water-tight 3MF, STL, and OBJ models compatible with Bambu Studio.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

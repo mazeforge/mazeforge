@@ -14,16 +14,24 @@ import { Compass } from 'lucide-react';
 
 function getBoardSpecs(diff: DifficultyLevel, complexity: ComplexityLevel): BoardSpecs {
   const specs: Partial<BoardSpecs> = {
-    thickness: 10,
-    channelWidth: 12,
+    thickness: 15,
     channelDepth: 8,
-    baseThickness: 2, 
-    ballDiameter: 10,
+    baseThickness: 7, 
     rodDiameter: 8,
     rodLength: 10,
-    knobDiameter: 15, // Adjusted strictly to meet knob requirements (15mm × 15mm × 15mm)
+    knobDiameter: 18, 
   };
 
+  // Set precise target board size strictly based on current Board Size (difficulty) selection
+  if (diff === 'easy') {
+    specs.size = 100.0;
+  } else if (diff === 'medium') {
+    specs.size = 140.0;
+  } else {
+    specs.size = 180.0;
+  }
+
+  // Set cells count based on complexity / density level
   if (diff === 'easy') {
     if (complexity === 'low') specs.cellCount = 5;
     else if (complexity === 'medium') specs.cellCount = 6;
@@ -38,12 +46,17 @@ function getBoardSpecs(diff: DifficultyLevel, complexity: ComplexityLevel): Boar
     else specs.cellCount = 13;
   }
 
-  // Set wall width to a constant of exactly 2.0 mm across all difficulty profiles
+  // Set wall width to a constant of exactly 2.0 mm across all profiles
   specs.wallWidth = 2.0;
 
-  // Calculate dynamic board size precisely based on constant 4mm outer margins, 12mm channel widths, and 2mm walls
+  // Calculate dynamic channel width so that Board Size remains exactly target size
   const margin = 4.0;
-  specs.size = 2 * margin + specs.cellCount * specs.channelWidth + (specs.cellCount - 1) * specs.wallWidth;
+  const totalWallSpaces = (specs.cellCount - 1) * specs.wallWidth;
+  const availableTrackSpace = specs.size - (2 * margin) - totalWallSpaces;
+  specs.channelWidth = availableTrackSpace / specs.cellCount;
+
+  // Adjust ball diameter dynamically to match the track with exactly 2.0 mm total safety clearance
+  specs.ballDiameter = specs.channelWidth - 2.0;
 
   return specs as BoardSpecs;
 }
