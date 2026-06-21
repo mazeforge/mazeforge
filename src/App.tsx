@@ -14,9 +14,9 @@ import { Compass } from 'lucide-react';
 
 function getBoardSpecs(diff: DifficultyLevel, complexity: ComplexityLevel): BoardSpecs {
   const specs: Partial<BoardSpecs> = {
-    thickness: 15,
+    thickness: 10.5,
     channelDepth: 8,
-    baseThickness: 7, 
+    baseThickness: 2.5, 
     rodDiameter: 8,
     rodLength: 10,
     knobDiameter: 18, 

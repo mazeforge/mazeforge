@@ -214,6 +214,177 @@ export function generateCylinderMeshZ(
   return { vertices, triangles };
 }
 
+// Generate a 90-degree fillet quadrant mesh (smooth outer/inner filleted bend)
+export function generateFilletQuadrantMesh(
+  insideCornerX: number,
+  insideCornerY: number,
+  cz: number,
+  height: number,
+  sweepUX: number,
+  sweepUY: number,
+  sweepVX: number,
+  sweepVY: number,
+  rIn: number,
+  rOut: number,
+  numSegments: number = 12
+): RawMesh {
+  const vertices: [number, number, number][] = [];
+  const triangles: [number, number, number][] = [];
+  const hLen = height / 2;
+
+  const steps = numSegments;
+  const offset = (steps + 1) * 2;
+
+  for (let s = 0; s < 2; s++) {
+    const z = cz + (s === 0 ? -hLen : hLen);
+    for (let i = 0; i <= steps; i++) {
+      const angle = (i / steps) * (Math.PI / 2);
+      const cosA = Math.cos(angle);
+      const sinA = Math.sin(angle);
+
+      const dx = sweepUX * cosA + sweepVX * sinA;
+      const dy = sweepUY * cosA + sweepVY * sinA;
+
+      // Inner point
+      const xIn = insideCornerX + rIn * dx;
+      const yIn = insideCornerY + rIn * dy;
+      vertices.push([xIn, yIn, z]);
+
+      // Outer point
+      const xOut = insideCornerX + rOut * dx;
+      const yOut = insideCornerY + rOut * dy;
+      vertices.push([xOut, yOut, z]);
+    }
+  }
+
+  // Cylindrical outer wall (r = rOut)
+  for (let i = 0; i < steps; i++) {
+    const bOuterIdx = 2 * i + 1;
+    const bOuterNextIdx = 2 * (i + 1) + 1;
+    const tOuterIdx = bOuterIdx + offset;
+    const tOuterNextIdx = bOuterNextIdx + offset;
+
+    triangles.push([bOuterIdx, tOuterIdx, bOuterNextIdx]);
+    triangles.push([bOuterNextIdx, tOuterIdx, tOuterNextIdx]);
+  }
+
+  // Cylindrical inner wall (r = rIn)
+  for (let i = 0; i < steps; i++) {
+    const bInnerIdx = 2 * i;
+    const bInnerNextIdx = 2 * (i + 1);
+    const tInnerIdx = bInnerIdx + offset;
+    const tInnerNextIdx = bInnerNextIdx + offset;
+
+    triangles.push([bInnerIdx, bInnerNextIdx, tInnerIdx]);
+    triangles.push([bInnerNextIdx, tInnerNextIdx, tInnerIdx]);
+  }
+
+  // Flat start cap (at i = 0)
+  triangles.push([0, offset, 1]);
+  triangles.push([1, offset, offset + 1]);
+
+  // Flat finish cap (at i = steps)
+  const bInF = 2 * steps;
+  const bOutF = 2 * steps + 1;
+  const tInF = bInF + offset;
+  const tOutF = bOutF + offset;
+  triangles.push([bInF, bOutF, tInF]);
+  triangles.push([bOutF, tOutF, tInF]);
+
+  // Bottom cap (facing down)
+  for (let i = 0; i < steps; i++) {
+    const bIn = 2 * i;
+    const bOut = 2 * i + 1;
+    const bInNext = 2 * (i + 1);
+    const bOutNext = 2 * (i + 1) + 1;
+
+    triangles.push([bIn, bInNext, bOut]);
+    triangles.push([bOut, bInNext, bOutNext]);
+  }
+
+  // Bottom cap (facing down)
+  // Top cap (facing up)
+  for (let i = 0; i < steps; i++) {
+    const tIn = 2 * i + offset;
+    const tOut = 2 * i + 1 + offset;
+    const tInNext = 2 * (i + 1) + offset;
+    const tOutNext = 2 * (i + 1) + 1 + offset;
+
+    triangles.push([tIn, tOut, tInNext]);
+    triangles.push([tOut, tOutNext, tInNext]);
+  }
+
+  return { vertices, triangles };
+}
+
+// Generate Half-Cylinder along Z-axis (for capping wall ends)
+export function generateHalfCylinderMeshZ(
+  radius: number,
+  height: number,
+  cx: number,
+  cy: number,
+  cz: number,
+  startAngle: number,
+  segments: number = 12
+): RawMesh {
+  const vertices: [number, number, number][] = [];
+  const triangles: [number, number, number][] = [];
+
+  const hLen = height / 2;
+
+  // We have 'segments' divisions, meaning segments + 1 vertices per cap ring.
+  const ringSize = segments + 1;
+
+  for (let s = 0; s < 2; s++) {
+    const z = cz + (s === 0 ? -hLen : hLen);
+    for (let i = 0; i <= segments; i++) {
+      const angle = startAngle + (i / segments) * Math.PI;
+      const x = cx + radius * Math.cos(angle);
+      const y = cy + radius * Math.sin(angle);
+      vertices.push([x, y, z]);
+    }
+  }
+
+  // Vertical sides: curved face
+  for (let i = 0; i < segments; i++) {
+    const bCurrent = i;
+    const bNext = i + 1;
+    const tCurrent = bCurrent + ringSize;
+    const tNext = bNext + ringSize;
+
+    triangles.push([bCurrent, tNext, bNext]);
+    triangles.push([bCurrent, tCurrent, tNext]);
+  }
+
+  // Vertical flat face (the back / diameter)
+  const bFirst = 0;
+  const bLast = segments;
+  const tFirst = ringSize;
+  const tLast = ringSize + segments;
+
+  triangles.push([bFirst, bLast, tLast]);
+  triangles.push([bFirst, tLast, tFirst]);
+
+  // Bottom cap center point & Top cap center point
+  const cap1CenterIdx = 2 * ringSize;
+  const cap2CenterIdx = 2 * ringSize + 1;
+
+  vertices.push([cx, cy, cz - hLen]);
+  vertices.push([cx, cy, cz + hLen]);
+
+  // Bottom semi-circle cap
+  for (let i = 0; i < segments; i++) {
+    triangles.push([cap1CenterIdx, i + 1, i]);
+  }
+
+  // Top semi-circle cap
+  for (let i = 0; i < segments; i++) {
+    triangles.push([cap2CenterIdx, i + ringSize, i + 1 + ringSize]);
+  }
+
+  return { vertices, triangles };
+}
+
 // Generate Rounded Square / Box along X-axis for handle knobs
 export function generateRoundedSquareKnobMeshX(
   width: number,
@@ -354,6 +525,19 @@ export function buildBoardMesh(grid: MazeGrid, specs: BoardSpecs, isPreview: boo
   const rightRimCenterY = -ChW / 2;
   meshes.push(generateBoxMesh(margin, rightRimLen, wallH, S / 2 - margin / 2, rightRimCenterY, outerWallCenterZ));
 
+  // Add half-cylinders to round off the open ends of the outer boundary outline box (at entrance & exit holes)
+  const outerWallCapRadius = margin / 2;
+  // Left rim top dead-end cap
+  meshes.push(generateHalfCylinderMeshZ(
+    outerWallCapRadius, wallH, -S / 2 + margin / 2, -S / 2 + margin + ChW, outerWallCenterZ,
+    Math.PI, isPreview ? 8 : 16
+  ));
+  // Right rim bottom dead-end cap
+  meshes.push(generateHalfCylinderMeshZ(
+    outerWallCapRadius, wallH, S / 2 - margin / 2, S / 2 - margin - ChW, outerWallCenterZ,
+    0, isPreview ? 8 : 16
+  ));
+
   // Helper coordinate getters:
   const getCellLeft = (c: number) => -S / 2 + margin + c * (ChW + WaW);
   const getCellCenterY = (r: number) => -S / 2 + margin + r * (ChW + WaW) + ChW / 2;
@@ -382,8 +566,8 @@ export function buildBoardMesh(grid: MazeGrid, specs: BoardSpecs, isPreview: boo
     }
   }
 
-  // Junction Pillars - placed perfectly at corners where at least one wall segment meets.
-  // This achieves perfect 90-degree flush corners without any jagged offsets or overlapping lines.
+  // Junction Pillars (Round Filleted Joints) - placed perfectly at corners where wall segments meet.
+  // This achieves perfectly rounded turns (bends) and smooth, organic junctions for high-quality rolling physics and 3D printing.
   for (let r = 0; r < N - 1; r++) {
     for (let c = 0; c < N - 1; c++) {
       const wUT = grid.verticalWalls[r][c];       // Upper transition
@@ -394,7 +578,79 @@ export function buildBoardMesh(grid: MazeGrid, specs: BoardSpecs, isPreview: boo
       if (wUT || wLT || wLH || wRH) {
         const xCorner = getCellLeft(c) + ChW + WaW / 2;
         const yCorner = -S / 2 + margin + r * (ChW + WaW) + ChW + WaW / 2;
-        meshes.push(generateBoxMesh(WaW, WaW, wallH, xCorner, yCorner, outerWallCenterZ));
+
+        const wN = wUT;
+        const wS = wLT;
+        const wW = wLH;
+        const wE = wRH;
+
+        const activeCount = (wN ? 1 : 0) + (wS ? 1 : 0) + (wW ? 1 : 0) + (wE ? 1 : 0);
+        let usedFillet = false;
+
+        if (activeCount === 2) {
+          // Check for the 4 bend configurations to apply fillet
+          if (wN && wE) {
+            meshes.push(generateFilletQuadrantMesh(
+              xCorner + WaW / 2, yCorner - WaW / 2, outerWallCenterZ, wallH,
+              0, 1, -1, 0,
+              0.16 * WaW, WaW, isPreview ? 8 : 16
+            ));
+            usedFillet = true;
+          } else if (wN && wW) {
+            meshes.push(generateFilletQuadrantMesh(
+              xCorner - WaW / 2, yCorner - WaW / 2, outerWallCenterZ, wallH,
+              0, 1, 1, 0,
+              0.16 * WaW, WaW, isPreview ? 8 : 16
+            ));
+            usedFillet = true;
+          } else if (wS && wE) {
+            meshes.push(generateFilletQuadrantMesh(
+              xCorner + WaW / 2, yCorner + WaW / 2, outerWallCenterZ, wallH,
+              0, -1, -1, 0,
+              0.16 * WaW, WaW, isPreview ? 8 : 16
+            ));
+            usedFillet = true;
+          } else if (wS && wW) {
+            meshes.push(generateFilletQuadrantMesh(
+              xCorner - WaW / 2, yCorner + WaW / 2, outerWallCenterZ, wallH,
+              0, -1, 1, 0,
+              0.16 * WaW, WaW, isPreview ? 8 : 16
+            ));
+            usedFillet = true;
+          }
+        } else if (activeCount === 1) {
+          // If only one wall segment is connected, it's a dead end (end wall). Draw a half-cylinder (setengah silinder) aligned perfectly with the wall's flat end.
+          if (wN) {
+            meshes.push(generateHalfCylinderMeshZ(
+              WaW / 2, wallH, xCorner, yCorner - WaW / 2, outerWallCenterZ,
+              0, isPreview ? 8 : 16
+            ));
+            usedFillet = true;
+          } else if (wS) {
+            meshes.push(generateHalfCylinderMeshZ(
+              WaW / 2, wallH, xCorner, yCorner + WaW / 2, outerWallCenterZ,
+              Math.PI, isPreview ? 8 : 16
+            ));
+            usedFillet = true;
+          } else if (wW) {
+            meshes.push(generateHalfCylinderMeshZ(
+              WaW / 2, wallH, xCorner - WaW / 2, yCorner, outerWallCenterZ,
+              -Math.PI / 2, isPreview ? 8 : 16
+            ));
+            usedFillet = true;
+          } else if (wE) {
+            meshes.push(generateHalfCylinderMeshZ(
+              WaW / 2, wallH, xCorner + WaW / 2, yCorner, outerWallCenterZ,
+              Math.PI / 2, isPreview ? 8 : 16
+            ));
+            usedFillet = true;
+          }
+        }
+
+        if (!usedFillet) {
+          // Draw standard straight block for straights, T-junctions, crosses, and dead ends
+          meshes.push(generateBoxMesh(WaW, WaW, wallH, xCorner, yCorner, outerWallCenterZ));
+        }
       }
     }
   }

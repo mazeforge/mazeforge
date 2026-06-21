@@ -114,14 +114,19 @@ export default function ThreeViewer({
     controls.dampingFactor = 0.08;
     controls.mouseButtons = {
       LEFT: THREE.MOUSE.ROTATE,
-      MIDDLE: THREE.MOUSE.PAN,
-      RIGHT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.PAN,
     };
     controlsRef.current = controls;
 
     controls.addEventListener('change', () => {
       needsRenderRef.current = true;
     });
+
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+    renderer.domElement.addEventListener('contextmenu', handleContextMenu);
 
     // Ambient support
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
@@ -195,6 +200,9 @@ export default function ThreeViewer({
         cancelAnimationFrame(resizeFrameId);
       }
       resizeObserver.disconnect();
+      if (renderer.domElement) {
+        renderer.domElement.removeEventListener('contextmenu', handleContextMenu);
+      }
       if (mountRef.current && renderer.domElement) {
         if (mountRef.current.contains(renderer.domElement)) {
           mountRef.current.removeChild(renderer.domElement);
