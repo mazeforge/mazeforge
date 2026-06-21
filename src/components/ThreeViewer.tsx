@@ -8,7 +8,6 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { BoardSpecs, MazeGrid } from '../types';
 import { buildBoardMesh, buildBallMesh } from '../exporter3MF';
-import { Compass, Eye, Maximize, RotateCcw, Video } from 'lucide-react';
 
 interface ThreeViewerProps {
   grid: MazeGrid;
@@ -73,62 +72,6 @@ export default function ThreeViewer({
     return sprite;
   };
 
-  // View reposition controllers
-  const setTopView = () => {
-    const camera = cameraRef.current;
-    const controls = controlsRef.current;
-    if (camera && controls) {
-      controls.reset();
-      camera.up.set(0, 1, 0);
-      camera.position.set(0, 0, S * 1.6);
-      camera.lookAt(0, 0, 0);
-      controls.target.set(0, 0, 0);
-      controls.update();
-    }
-  };
-
-  const setFrontView = () => {
-    const camera = cameraRef.current;
-    const controls = controlsRef.current;
-    if (camera && controls) {
-      controls.reset();
-      camera.up.set(0, 0, 1);
-      camera.position.set(0, -S * 1.6, 0);
-      camera.lookAt(0, 0, 0);
-      controls.target.set(0, 0, 0);
-      controls.update();
-    }
-  };
-
-  const setSideView = () => {
-    const camera = cameraRef.current;
-    const controls = controlsRef.current;
-    if (camera && controls) {
-      controls.reset();
-      camera.up.set(0, 0, 1);
-      camera.position.set(S * 1.6, 0, 0);
-      camera.lookAt(0, 0, 0);
-      controls.target.set(0, 0, 0);
-      controls.update();
-    }
-  };
-
-  const setIsomericView = () => {
-    const camera = cameraRef.current;
-    const controls = controlsRef.current;
-    if (camera && controls) {
-      controls.reset();
-      camera.up.set(0, 0, 1);
-      camera.position.set(S * 1.1, -S * 1.1, S * 1.1);
-      camera.lookAt(0, 0, 0);
-      controls.target.set(0, 0, 0);
-      controls.update();
-    }
-  };
-
-  const resetView = () => {
-    setIsomericView();
-  };
 
   // Refs for camera/light adjustments
   const mainLightRef = useRef<THREE.DirectionalLight | null>(null);
@@ -429,67 +372,6 @@ export default function ThreeViewer({
         ref={mountRef} 
         className="flex-1 w-full h-full cursor-grab active:cursor-grabbing" 
       />
-
-      {/* CAD Overlay Controls HUD */}
-      <div className="absolute top-4 left-4 flex flex-col gap-2 pointer-events-none select-none z-10">
-        <div className="bg-white/95 backdrop-blur shadow-sm border border-zinc-200/50 rounded-lg px-3 py-1.5 flex items-center gap-2">
-          <Eye className="w-4 h-4 text-zinc-650" />
-          <span className="text-xs font-bold uppercase tracking-wide text-zinc-800">
-            CAD Model Inspector
-          </span>
-        </div>
-        <div className="bg-white/95 backdrop-blur shadow-sm border border-zinc-200/50 rounded-lg px-3 py-1.5 flex flex-col gap-0.5 text-[10px] text-zinc-500 font-mono">
-          <div>Grid Size: <span className="font-semibold text-zinc-800">{specs.cellCount} × {specs.cellCount}</span></div>
-          <div>Wall Width: <span className="font-semibold text-zinc-800">{specs.wallWidth.toFixed(2)} mm</span></div>
-          <div>Unit Scale: <span className="font-semibold text-zinc-800">1:1 Millimeters</span></div>
-        </div>
-      </div>
-
-      {/* Navigation Quick Action Buttons overlay */}
-      <div className="absolute top-4 right-4 bg-white/95 backdrop-blur shadow-sm border border-zinc-200/50 rounded-xl p-2.5 flex flex-col gap-1.5 z-10 select-none max-w-xs">
-        <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">Navigation Views</h4>
-        <div className="grid grid-cols-2 gap-1.5">
-          <button
-            onClick={setTopView}
-            className="flex items-center gap-1.5 px-2 py-1.5 text-[11px] font-semibold text-zinc-700 bg-zinc-50 hover:bg-zinc-100 rounded-md border border-zinc-200"
-            title="Top orthographic view"
-          >
-            <Video className="w-3.5 h-3.5 text-zinc-500" />
-            <span>Top</span>
-          </button>
-          <button
-            onClick={setFrontView}
-            className="flex items-center gap-1.5 px-2 py-1.5 text-[11px] font-semibold text-zinc-700 bg-zinc-50 hover:bg-zinc-100 rounded-md border border-zinc-200"
-            title="Front side view"
-          >
-            <Video className="w-3.5 h-3.5 text-zinc-500" />
-            <span>Front</span>
-          </button>
-          <button
-            onClick={setSideView}
-            className="flex items-center gap-1.5 px-2 py-1.5 text-[11px] font-semibold text-zinc-700 bg-zinc-50 hover:bg-zinc-100 rounded-md border border-zinc-200"
-            title="Right side view"
-          >
-            <Video className="w-3.5 h-3.5 text-zinc-500" />
-            <span>Side</span>
-          </button>
-          <button
-            onClick={setIsomericView}
-            className="flex items-center gap-1.5 px-2 py-1.5 text-[11px] font-semibold text-zinc-700 bg-zinc-50 hover:bg-zinc-100 rounded-md border border-zinc-200"
-            title="Angled Perspective view"
-          >
-            <Compass className="w-3.5 h-3.5 text-zinc-500" />
-            <span>Isometric</span>
-          </button>
-        </div>
-        <button
-          onClick={resetView}
-          className="mt-1 w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-[10px] font-bold text-zinc-500 hover:text-zinc-800 uppercase border-t border-zinc-100 transition pt-1.5"
-        >
-          <RotateCcw className="w-3 h-3" />
-          <span>Reset View</span>
-        </button>
-      </div>
 
     </div>
   );

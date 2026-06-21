@@ -10,7 +10,7 @@ import { generateMaze, analyzeDifficulty } from './mazeGenerator';
 import { buildBoardMesh, buildBallMesh, exportToBinarySTL, mergeMeshes } from './exporter3MF';
 import Sidebar from './components/Sidebar';
 import ThreeViewer from './components/ThreeViewer';
-import { Flame, Compass, HelpCircle } from 'lucide-react';
+import { Compass } from 'lucide-react';
 
 function getBoardSpecs(diff: DifficultyLevel, complexity: ComplexityLevel): BoardSpecs {
   const specs: Partial<BoardSpecs> = {
@@ -148,15 +148,6 @@ export default function App() {
             <h2 className="text-sm font-bold tracking-tight text-zinc-950 uppercase flex items-center gap-1.5">
               <Compass className="w-4 h-4 text-zinc-650" />
             </h2>
-          </div>
-
-          <div className="flex items-center gap-4 text-xs font-semibold text-zinc-600 font-mono">
-            <div className="flex items-center gap-1 text-[11px]">
-              <Flame className="w-3.5 h-3.5 text-orange-500 animate-pulse" />
-              <span>Bambu Studio Native</span>
-            </div>
-            <span className="text-zinc-300">|</span>
-            <span>MM Units Scale</span>
           </div>
         </header>
 
