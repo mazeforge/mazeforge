@@ -29,6 +29,7 @@ export default function ThreeViewer({
   const controlsRef = useRef<OrbitControls | null>(null);
   const boardGroupRef = useRef<THREE.Group | null>(null);
   const needsRenderRef = useRef<boolean>(true);
+  const cameraInitializedRef = useRef<boolean>(false);
 
   // Dimension helpers
   const S = specs.size;
@@ -263,12 +264,14 @@ export default function ThreeViewer({
 
     warmFillLight.position.set(-S * 1.5, S, S / 2);
 
-    // Smooth reset viewpoint positioning on grid rebind / reset
-    controls.reset();
-    camera.up.set(0, 0, 1);
-    camera.position.set(S * 1.1, -S * 1.1, S * 1.1);
-    camera.lookAt(0, 0, 0);
-    controls.target.set(0, 0, 0);
+    // Initialize viewpoint positioning only on first model load
+    if (!cameraInitializedRef.current) {
+      camera.up.set(0, 0, 1);
+      camera.position.set(S * 1.1, -S * 1.1, S * 1.1);
+      camera.lookAt(0, 0, 0);
+      controls.target.set(0, 0, 0);
+      cameraInitializedRef.current = true;
+    }
     controls.update();
 
     // Reconstruct Board Geometry using isPreview: true (skips hundreds of heavy cylinders, keeps frames high)

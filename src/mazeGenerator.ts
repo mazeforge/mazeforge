@@ -13,176 +13,152 @@ export function generateMaze(
   const N = specs.cellCount;
   const rows = N;
   const cols = N;
-
-  // Initialize wall matrices (all walls intact)
-  const verticalWalls: boolean[][] = [];
-  const horizontalWalls: boolean[][] = [];
-
-  for (let r = 0; r < rows; r++) {
-    verticalWalls.push(new Array(cols - 1).fill(true));
-  }
-  for (let r = 0; r < rows - 1; r++) {
-    horizontalWalls.push(new Array(cols).fill(true));
-  }
-
   const start = { r: 0, c: 0 };
   const finish = { r: rows - 1, c: cols - 1 };
 
   const totalCells = rows * cols;
-  let targetLength = Math.floor(totalCells * 0.74); // 74% target primary route occupies most of the board!
+  // We'll target finding a maze with a path length of at least 40% of the cells (which guarantees a beautiful winding path)
+  const targetLength = Math.max(5, Math.floor(totalCells * 0.40));
 
-  let primaryPath: { r: number; c: number }[] = [];
-  let attempts = 0;
+  let bestGrid: MazeGrid | null = null;
+  let maxPathLength = -1;
 
-  while (attempts < 150) {
-    attempts++;
-    // Gradually reduce complexity target if finding a self-avoiding path is too hard on high-density grids
-    if (attempts % 15 === 0) {
-      targetLength = Math.max(Math.floor(totalCells * 0.50), targetLength - 2);
+  // Limit to at most 15 instantaneous runs to entirely prevent any threat of main-thread freeze or crash
+  for (let attempt = 0; attempt < 15; attempt++) {
+    // Initialize wall matrices (all walls intact)
+    const verticalWalls: boolean[][] = [];
+    const horizontalWalls: boolean[][] = [];
+
+    for (let r = 0; r < rows; r++) {
+      verticalWalls.push(new Array(cols - 1).fill(true));
+    }
+    for (let r = 0; r < rows - 1; r++) {
+      horizontalWalls.push(new Array(cols).fill(true));
     }
 
-    const path: { r: number; c: number }[] = [start];
-    const visited = Array.from({ length: rows }, () => new Array(cols).fill(false));
-    visited[start.r][start.c] = true;
-
-    // DFS with random direction selection
-    const dfs = (r: number, c: number): boolean => {
-      if (r === finish.r && c === finish.c) {
-        if (path.length >= targetLength) {
-          primaryPath = [...path];
-          return true;
-        }
-        return false; // too short, continue search
-      }
-
-      const dirs = [
-        { dr: -1, dc: 0 },
-        { dr: 1, dc: 0 },
-        { dr: 0, dc: -1 },
-        { dr: 0, dc: 1 }
-      ];
-
-      // Randomize neighbors
-      const neighbors = dirs
-        .map(d => ({ r: r + d.dr, c: c + d.dc, weight: Math.random() }))
-        .filter(n => inBounds(n.r, n.c, rows, cols) && !visited[n.r][n.c]);
-
-      neighbors.sort((a, b) => b.weight - a.weight);
-
-      for (const n of neighbors) {
-        // If it's the finish cell, but we haven't reached target length, skip it for now if there are other candidates
-        if (n.r === finish.r && n.c === finish.c && path.length < targetLength) {
-          if (neighbors.length > 1) {
-            continue;
+    if (algorithm === 'prims') {
+      // Randomized Prim's Algorithm for Perfect Maze Spanning Tree
+      const primVisited = Array.from({ length: rows }, () => new Array(cols).fill(false));
+      
+      type PrimWall = {
+        r1: number; c1: number;
+        r2: number; c2: number;
+        type: 'v' | 'h';
+        wr: number;
+        wc: number;
+      };
+      
+      const wallList: PrimWall[] = [];
+      
+      const addWallsOfCell = (r: number, c: number) => {
+        primVisited[r][c] = true;
+        const dirs = [
+          { dr: -1, dc: 0, type: 'h', wr: r - 1, wc: c }, // up
+          { dr: 1, dc: 0, type: 'h', wr: r, wc: c },     // down
+          { dr: 0, dc: -1, type: 'v', wr: r, wc: c - 1 }, // left
+          { dr: 0, dc: 1, type: 'v', wr: r, wc: c },     // right
+        ];
+        
+        dirs.forEach(d => {
+          const nr = r + d.dr;
+          const nc = c + d.dc;
+          if (inBounds(nr, nc, rows, cols) && !primVisited[nr][nc]) {
+            wallList.push({
+              r1: r, c1: c,
+              r2: nr, c2: nc,
+              type: d.type as 'v' | 'h',
+              wr: d.wr,
+              wc: d.wc
+            });
           }
+        });
+      };
+      
+      addWallsOfCell(0, 0);
+      
+      while (wallList.length > 0) {
+        const idx = Math.floor(Math.random() * wallList.length);
+        const wall = wallList.splice(idx, 1)[0];
+        
+        if (primVisited[wall.r1][wall.c1] !== primVisited[wall.r2][wall.c2]) {
+          const unvisitedR = primVisited[wall.r1][wall.c1] ? wall.r2 : wall.r1;
+          const unvisitedC = primVisited[wall.r1][wall.c1] ? wall.c2 : wall.c1;
+          
+          if (wall.type === 'v') {
+            verticalWalls[wall.wr][wall.wc] = false;
+          } else {
+            horizontalWalls[wall.wr][wall.wc] = false;
+          }
+          
+          addWallsOfCell(unvisitedR, unvisitedC);
         }
-
-        visited[n.r][n.c] = true;
-        path.push({ r: n.r, c: n.c });
-
-        if (dfs(n.r, n.c)) {
-          return true;
-        }
-
-        path.pop();
-        visited[n.r][n.c] = false;
       }
+    } else {
+      // Randomized DFS Algorithm for Perfect Maze Spanning Tree
+      const genVisited = Array.from({ length: rows }, () => new Array(cols).fill(false));
+      const stack: { r: number; c: number }[] = [];
+      
+      genVisited[0][0] = true;
+      stack.push({ r: 0, c: 0 });
+      
+      while (stack.length > 0) {
+        const curr = stack[stack.length - 1];
+        const dirs = [
+          { dr: -1, dc: 0, type: 'h', wr: curr.r - 1, wc: curr.c }, // up
+          { dr: 1, dc: 0, type: 'h', wr: curr.r, wc: curr.c },     // down
+          { dr: 0, dc: -1, type: 'v', wr: curr.r, wc: curr.c - 1 }, // left
+          { dr: 0, dc: 1, type: 'v', wr: curr.r, wc: curr.c },     // right
+        ];
+        
+        const unvisitedNeighbors = dirs.filter(d => {
+          const nr = curr.r + d.dr;
+          const nc = curr.c + d.dc;
+          return inBounds(nr, nc, rows, cols) && !genVisited[nr][nc];
+        });
+        
+        if (unvisitedNeighbors.length > 0) {
+          const chosen = unvisitedNeighbors[Math.floor(Math.random() * unvisitedNeighbors.length)];
+          const nr = curr.r + chosen.dr;
+          const nc = curr.c + chosen.dc;
+          
+          if (chosen.type === 'v') {
+            verticalWalls[chosen.wr][chosen.wc] = false;
+          } else {
+            horizontalWalls[chosen.wr][chosen.wc] = false;
+          }
+          
+          genVisited[nr][nc] = true;
+          stack.push({ r: nr, c: nc });
+        } else {
+          stack.pop();
+        }
+      }
+    }
 
-      return false;
+    const currentGrid: MazeGrid = {
+      rows,
+      cols,
+      verticalWalls,
+      horizontalWalls,
+      start,
+      finish,
     };
 
-    if (dfs(start.r, start.c)) {
+    const solution = solveMaze(currentGrid);
+    const pathLength = solution.length;
+
+    if (pathLength > maxPathLength) {
+      maxPathLength = pathLength;
+      bestGrid = currentGrid;
+    }
+
+    // Stop candidate generation immediately once we have a winding path that satisfies complexity criteria
+    if (pathLength >= targetLength) {
       break;
     }
   }
 
-  // Knock down walls along the primary path (this guarantees start and finish are fully connected)
-  for (let i = 0; i < primaryPath.length - 1; i++) {
-    const p1 = primaryPath[i];
-    const p2 = primaryPath[i + 1];
-    if (p1.r === p2.r) {
-      const minC = Math.min(p1.c, p2.c);
-      verticalWalls[p1.r][minC] = false;
-    } else {
-      const minR = Math.min(p1.r, p2.r);
-      horizontalWalls[minR][p1.c] = false;
-    }
-  }
-
-  // Fill in secondary branching paths to cover all remaining cells of the grid
-  const branchVisited = Array.from({ length: rows }, () => new Array(cols).fill(false));
-  primaryPath.forEach(p => {
-    branchVisited[p.r][p.c] = true;
-  });
-
-  type BranchWall = {
-    r1: number; c1: number; // Visited side
-    r2: number; c2: number; // Unvisited candidate
-    wallType: 'v' | 'h';
-    wallR: number;
-    wallC: number;
-  };
-
-  const frontier: BranchWall[] = [];
-
-  const addBranchFrontier = (r: number, c: number) => {
-    const dirs = [
-      { dr: -1, dc: 0, wallType: 'h', wallR: r - 1, wallC: c },
-      { dr: 1, dc: 0, wallType: 'h', wallR: r, wallC: c },
-      { dr: 0, dc: -1, wallType: 'v', wallR: r, wallC: c - 1 },
-      { dr: 0, dc: 1, wallType: 'v', wallR: r, wallC: c },
-    ];
-
-    dirs.forEach((d) => {
-      const nr = r + d.dr;
-      const nc = c + d.dc;
-      if (inBounds(nr, nc, rows, cols) && !branchVisited[nr][nc]) {
-        // Crucial safety constraint: NEVER connect a branch into the 'finish' cell!
-        // This ensures the finish remains a terminal dead-end of degree 1.
-        if (nr === finish.r && nc === finish.c) return;
-
-        frontier.push({
-          r1: r, c1: c,
-          r2: nr, c2: nc,
-          wallType: d.wallType as 'v' | 'h',
-          wallR: d.wallR,
-          wallC: d.wallC
-        });
-      }
-    });
-  };
-
-  // Seed branch expansion from all primary path cells except the finish cell
-  for (let i = 0; i < primaryPath.length - 1; i++) {
-    addBranchFrontier(primaryPath[i].r, primaryPath[i].c);
-  }
-
-  // randomized growing tree
-  while (frontier.length > 0) {
-    const selectIndex = Math.floor(Math.random() * frontier.length);
-    const wall = frontier.splice(selectIndex, 1)[0];
-
-    if (branchVisited[wall.r1][wall.c1] && !branchVisited[wall.r2][wall.c2]) {
-      // Knock down wall
-      if (wall.wallType === 'v') {
-         verticalWalls[wall.wallR][wall.wallC] = false;
-      } else {
-         horizontalWalls[wall.wallR][wall.wallC] = false;
-      }
-
-      branchVisited[wall.r2][wall.c2] = true;
-      addBranchFrontier(wall.r2, wall.c2);
-    }
-  }
-
-  return {
-    rows,
-    cols,
-    verticalWalls,
-    horizontalWalls,
-    start,
-    finish,
-  };
+  return bestGrid!;
 }
 
 // Complete Solver using BFS to find optimal solution path
