@@ -134,8 +134,8 @@ export function generateMaze(
   let bestGrid: MazeGrid | null = null;
   let bestScore = -Infinity;
 
-  // Running 400 iterations lets us scan for an extremely winded, difficult path with minimal border dead ends
-  const totalTrials = 400;
+  // Running 600 iterations lets us scan for an extremely winded, difficult path with minimal border dead ends
+  const totalTrials = 600;
 
   for (let attempt = 0; attempt < totalTrials; attempt++) {
     // Initialize wall matrices (all walls intact)
@@ -313,11 +313,48 @@ export function generateMaze(
       }
     }
 
-    // Scoring metric: We want maximum start-to-finish pathLength, maximum winding turns, zero border wall fingers, and minimal borderDeadEnds
-    let difficultyWeight = (pathLength * 50) + (turns * 250);
-    // Apply heavy penalty if solution path is too short (covering less than 55% of total cells)
-    if (pathLength < totalCells * 0.55) {
-      difficultyWeight -= 100000;
+    // Calculate depths of all misleading/dead-end branches off the solution path
+    const solutionSet = new Set(solution.map(p => `${p.r},${p.c}`));
+    const branchDepths: number[] = [];
+
+    for (const cell of solution) {
+      const dirs = [
+        { dr: -1, dc: 0, type: 'h', wr: cell.r - 1, wc: cell.c }, // up
+        { dr: 1, dc: 0, type: 'h', wr: cell.r, wc: cell.c },     // down
+        { dr: 0, dc: -1, type: 'v', wr: cell.r, wc: cell.c - 1 }, // left
+        { dr: 0, dc: 1, type: 'v', wr: cell.r, wc: cell.c },     // right
+      ];
+
+      for (const d of dirs) {
+        const nr = cell.r + d.dr;
+        const nc = cell.c + d.dc;
+        if (!inBounds(nr, nc, rows, cols)) continue;
+        if (solutionSet.has(`${nr},${nc}`)) continue;
+
+        // Check if there is no wall (passages)
+        let hasWall = false;
+        if (d.type === 'v' && verticalWalls[d.wr][d.wc]) hasWall = true;
+        if (d.type === 'h' && horizontalWalls[d.wr][d.wc]) hasWall = true;
+
+        if (!hasWall) {
+          const depth = getBranchDepth(nr, nc, cell.r, cell.c, rows, cols, verticalWalls, horizontalWalls, solutionSet);
+          branchDepths.push(depth);
+        }
+      }
+    }
+
+    const averageBranchDepth = branchDepths.length > 0 ? branchDepths.reduce((a, b) => a + b, 0) / branchDepths.length : 0;
+    const maxBranchDepth = branchDepths.length > 0 ? Math.max(...branchDepths) : 0;
+
+    // Scoring metric: We want maximum start-to-finish pathLength, maximum winding turns, zero border wall fingers,
+    // minimal borderDeadEnds, and longer misleading dead-end paths!
+    // We heavily multiply pathLength to prioritize making the solution path as long as possible.
+    let difficultyWeight = (pathLength * 5000) + (turns * 200) + (averageBranchDepth * 450) + (maxBranchDepth * 200);
+    
+    // Dynamically calculate target path length ratio (85% on small boards, down to 72% on massive boards)
+    const minLengthRatio = totalCells <= 36 ? 0.85 : (totalCells <= 64 ? 0.80 : (totalCells <= 100 ? 0.75 : 0.72));
+    if (pathLength < totalCells * minLengthRatio) {
+      difficultyWeight -= 800000;
     }
     const score = difficultyWeight - (borderWallFingers * 2000) - (borderDeadEnds * 150);
 
@@ -331,6 +368,11 @@ export function generateMaze(
         start,
         finish,
       };
+    }
+
+    // Early exit if we find an exceptionally winding, perfect finger-free path covering at least 92% of the board
+    if (borderWallFingers === 0 && borderDeadEnds === 0 && pathLength >= Math.floor(totalCells * 0.92)) {
+      break;
     }
   }
 
@@ -419,48 +461,6 @@ export function generateMaze(
             finalHWalls[chosen.wr][chosen.wc] = false;
           }
         }
-      }
-    }
-  }
-
-  // Post-Post-Processing: Enforce that the finish cell has EXACTLY one open wall (the entry transition from the solution path).
-  // This guarantees there are absolutely NO paths continuing past/after the finish cell.
-  const finalSol = solveMaze(finalGrid);
-  if (finalSol.length > 1) {
-    const beforeFinish = finalSol[finalSol.length - 2];
-    if (beforeFinish.r === rows - 2 && beforeFinish.c === cols - 1) {
-      // Path came from above. Keep Up open (passage = false), close Left (wall = true)
-      finalGrid.horizontalWalls[rows - 2][cols - 1] = false;
-      if (cols > 1) {
-        finalGrid.verticalWalls[rows - 1][cols - 2] = true;
-      }
-    } else if (beforeFinish.r === rows - 1 && beforeFinish.c === cols - 2) {
-      // Path came from left. Keep Left open (passage = false), close Up (wall = true)
-      if (cols > 1) {
-        finalGrid.verticalWalls[rows - 1][cols - 2] = false;
-      }
-      if (rows > 1) {
-        finalGrid.horizontalWalls[rows - 2][cols - 1] = true;
-      }
-    }
-  }
-
-  // Also, for the start cell (0, 0), let's ensure it has exactly one open wall (the exit transition into the solution path).
-  if (finalSol.length > 1) {
-    const afterStart = finalSol[1];
-    if (afterStart.r === 1 && afterStart.c === 0) {
-      // Path goes down. Keep Down open (passage = false), close Right (wall = true)
-      finalGrid.horizontalWalls[0][0] = false;
-      if (cols > 1) {
-        finalGrid.verticalWalls[0][0] = true;
-      }
-    } else if (afterStart.r === 0 && afterStart.c === 1) {
-      // Path goes right. Keep Right open (passage = false), close Down (wall = true)
-      if (cols > 1) {
-        finalGrid.verticalWalls[0][0] = false;
-      }
-      if (rows > 1) {
-        finalGrid.horizontalWalls[0][0] = true;
       }
     }
   }
