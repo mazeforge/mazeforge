@@ -77,6 +77,48 @@ function countBorderWallFingers(
   return fingers;
 }
 
+// Helper to recursively compute the maximum depth of a branch off the solution path.
+function getBranchDepth(
+  r: number,
+  c: number,
+  parentR: number,
+  parentC: number,
+  rows: number,
+  cols: number,
+  verticalWalls: boolean[][],
+  horizontalWalls: boolean[][],
+  solutionSet: Set<string>
+): number {
+  let maxDepth = 1;
+  const dirs = [
+    { dr: -1, dc: 0, type: 'h', wr: r - 1, wc: c }, // up
+    { dr: 1, dc: 0, type: 'h', wr: r, wc: c },     // down
+    { dr: 0, dc: -1, type: 'v', wr: r, wc: c - 1 }, // left
+    { dr: 0, dc: 1, type: 'v', wr: r, wc: c },     // right
+  ];
+
+  for (const d of dirs) {
+    const nr = r + d.dr;
+    const nc = c + d.dc;
+    if (nr === parentR && nc === parentC) continue;
+    if (solutionSet.has(`${nr},${nc}`)) continue;
+    if (!inBounds(nr, nc, rows, cols)) continue;
+
+    // Check wall
+    let hasWall = false;
+    if (d.type === 'v' && verticalWalls[d.wr][d.wc]) hasWall = true;
+    if (d.type === 'h' && horizontalWalls[d.wr][d.wc]) hasWall = true;
+
+    if (!hasWall) {
+      const depth = 1 + getBranchDepth(nr, nc, r, c, rows, cols, verticalWalls, horizontalWalls, solutionSet);
+      if (depth > maxDepth) {
+        maxDepth = depth;
+      }
+    }
+  }
+  return maxDepth;
+}
+
 // Procedural Maze Generator
 export function generateMaze(
   specs: BoardSpecs,
@@ -92,8 +134,8 @@ export function generateMaze(
   let bestGrid: MazeGrid | null = null;
   let bestScore = -Infinity;
 
-  // Running 300 iterations lets us scan for an extremely winded, difficult path with minimal border dead ends
-  const totalTrials = 300;
+  // Running 400 iterations lets us scan for an extremely winded, difficult path with minimal border dead ends
+  const totalTrials = 400;
 
   for (let attempt = 0; attempt < totalTrials; attempt++) {
     // Initialize wall matrices (all walls intact)
@@ -227,6 +269,28 @@ export function generateMaze(
     };
 
     const solution = solveMaze(currentGrid);
+
+    // Enforce exactly 1 open wall for the finish cell, which is the transition to/from the solution path.
+    // Close any other walls leading to the finish cell to guarantee no path exists after the finish.
+    if (solution.length > 1) {
+      const beforeFinish = solution[solution.length - 2];
+      if (beforeFinish.r === rows - 2 && beforeFinish.c === cols - 1) {
+        // Path came from above. Keep Up open, close Left (if in bounds)
+        horizontalWalls[rows - 2][cols - 1] = false;
+        if (cols > 1) {
+          verticalWalls[rows - 1][cols - 2] = true;
+        }
+      } else if (beforeFinish.r === rows - 1 && beforeFinish.c === cols - 2) {
+        // Path came from left. Keep Left open, close Up (if in bounds)
+        if (cols > 1) {
+          verticalWalls[rows - 1][cols - 2] = false;
+        }
+        if (rows > 1) {
+          horizontalWalls[rows - 2][cols - 1] = true;
+        }
+      }
+    }
+
     const pathLength = solution.length;
     const borderDeadEnds = countBorderDeadEnds(rows, cols, verticalWalls, horizontalWalls, start, finish);
     const borderWallFingers = countBorderWallFingers(rows, cols, verticalWalls, horizontalWalls);
@@ -250,10 +314,10 @@ export function generateMaze(
     }
 
     // Scoring metric: We want maximum start-to-finish pathLength, maximum winding turns, zero border wall fingers, and minimal borderDeadEnds
-    let difficultyWeight = (pathLength * 30) + (turns * 120);
-    // Apply heavy penalty if solution path is too short (covering less than 45% of total cells)
-    if (pathLength < totalCells * 0.45) {
-      difficultyWeight -= 50000;
+    let difficultyWeight = (pathLength * 50) + (turns * 250);
+    // Apply heavy penalty if solution path is too short (covering less than 55% of total cells)
+    if (pathLength < totalCells * 0.55) {
+      difficultyWeight -= 100000;
     }
     const score = difficultyWeight - (borderWallFingers * 2000) - (borderDeadEnds * 150);
 
@@ -267,11 +331,6 @@ export function generateMaze(
         start,
         finish,
       };
-    }
-
-    // Early exit if we find an exceptionally winding, perfect finger-free path
-    if (borderWallFingers === 0 && borderDeadEnds === 0 && pathLength >= Math.floor(totalCells * 0.70)) {
-      break;
     }
   }
 
@@ -317,19 +376,35 @@ export function generateMaze(
         const closedNeighbors: { nr: number; nc: number; type: 'v' | 'h'; wr: number; wc: number }[] = [];
         // Up
         if (r > 0 && finalHWalls[r - 1][c]) {
-          closedNeighbors.push({ nr: r - 1, nc: c, type: 'h', wr: r - 1, wc: c });
+          const nr = r - 1;
+          const nc = c;
+          if (!((nr === start.r && nc === start.c) || (nr === finish.r && nc === finish.c))) {
+            closedNeighbors.push({ nr, nc, type: 'h', wr: r - 1, wc: c });
+          }
         }
         // Down
         if (r < rows - 1 && finalHWalls[r][c]) {
-          closedNeighbors.push({ nr: r + 1, nc: c, type: 'h', wr: r, wc: c });
+          const nr = r + 1;
+          const nc = c;
+          if (!((nr === start.r && nc === start.c) || (nr === finish.r && nc === finish.c))) {
+            closedNeighbors.push({ nr, nc, type: 'h', wr: r, wc: c });
+          }
         }
         // Left
         if (c > 0 && finalVWalls[r][c - 1]) {
-          closedNeighbors.push({ nr: r, nc: c - 1, type: 'v', wr: r, wc: c - 1 });
+          const nr = r;
+          const nc = c - 1;
+          if (!((nr === start.r && nc === start.c) || (nr === finish.r && nc === finish.c))) {
+            closedNeighbors.push({ nr, nc, type: 'v', wr: r, wc: c - 1 });
+          }
         }
         // Right
         if (c < cols - 1 && finalVWalls[r][c]) {
-          closedNeighbors.push({ nr: r, nc: c + 1, type: 'v', wr: r, wc: c });
+          const nr = r;
+          const nc = c + 1;
+          if (!((nr === start.r && nc === start.c) || (nr === finish.r && nc === finish.c))) {
+            closedNeighbors.push({ nr, nc, type: 'v', wr: r, wc: c });
+          }
         }
 
         if (closedNeighbors.length > 0) {
@@ -344,6 +419,48 @@ export function generateMaze(
             finalHWalls[chosen.wr][chosen.wc] = false;
           }
         }
+      }
+    }
+  }
+
+  // Post-Post-Processing: Enforce that the finish cell has EXACTLY one open wall (the entry transition from the solution path).
+  // This guarantees there are absolutely NO paths continuing past/after the finish cell.
+  const finalSol = solveMaze(finalGrid);
+  if (finalSol.length > 1) {
+    const beforeFinish = finalSol[finalSol.length - 2];
+    if (beforeFinish.r === rows - 2 && beforeFinish.c === cols - 1) {
+      // Path came from above. Keep Up open (passage = false), close Left (wall = true)
+      finalGrid.horizontalWalls[rows - 2][cols - 1] = false;
+      if (cols > 1) {
+        finalGrid.verticalWalls[rows - 1][cols - 2] = true;
+      }
+    } else if (beforeFinish.r === rows - 1 && beforeFinish.c === cols - 2) {
+      // Path came from left. Keep Left open (passage = false), close Up (wall = true)
+      if (cols > 1) {
+        finalGrid.verticalWalls[rows - 1][cols - 2] = false;
+      }
+      if (rows > 1) {
+        finalGrid.horizontalWalls[rows - 2][cols - 1] = true;
+      }
+    }
+  }
+
+  // Also, for the start cell (0, 0), let's ensure it has exactly one open wall (the exit transition into the solution path).
+  if (finalSol.length > 1) {
+    const afterStart = finalSol[1];
+    if (afterStart.r === 1 && afterStart.c === 0) {
+      // Path goes down. Keep Down open (passage = false), close Right (wall = true)
+      finalGrid.horizontalWalls[0][0] = false;
+      if (cols > 1) {
+        finalGrid.verticalWalls[0][0] = true;
+      }
+    } else if (afterStart.r === 0 && afterStart.c === 1) {
+      // Path goes right. Keep Right open (passage = false), close Down (wall = true)
+      if (cols > 1) {
+        finalGrid.verticalWalls[0][0] = false;
+      }
+      if (rows > 1) {
+        finalGrid.horizontalWalls[0][0] = true;
       }
     }
   }

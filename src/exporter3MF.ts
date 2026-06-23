@@ -662,8 +662,8 @@ export function buildBoardMesh(grid: MazeGrid, specs: BoardSpecs, isPreview: boo
   const rodR = specs.rodDiameter / 2;
   const rodL = specs.rodLength;
   
-  // Knob dimensions: 15 mm wide, matches board thickness in height (totalT)
-  const knobWidth = 15.0; // width in Y
+  // Knob dimensions: 35 mm wide for a wider ergonomic grip, matches board thickness in height (totalT)
+  const knobWidth = 35.0; // width in Y
   const knobHeight = totalT; // height in Z (matches board thickness)
   const knobThickness = 15.0; // thickness along X-axis
   const knobFillet = Math.min(3.0, knobHeight / 2 - 0.5);
