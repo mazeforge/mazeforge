@@ -33,17 +33,17 @@ function getBoardSpecs(diff: DifficultyLevel, complexity: ComplexityLevel): Boar
 
   // Set cells count based on complexity / density level
   if (diff === 'easy') {
-    if (complexity === 'low') specs.cellCount = 5;
-    else if (complexity === 'medium') specs.cellCount = 6;
-    else specs.cellCount = 7;
+    if (complexity === 'low') specs.cellCount = 6;
+    else if (complexity === 'medium') specs.cellCount = 7;
+    else specs.cellCount = 8;
   } else if (diff === 'medium') {
-    if (complexity === 'low') specs.cellCount = 7;
-    else if (complexity === 'medium') specs.cellCount = 8;
-    else specs.cellCount = 9;
+    if (complexity === 'low') specs.cellCount = 8;
+    else if (complexity === 'medium') specs.cellCount = 10;
+    else specs.cellCount = 12;
   } else {
-    if (complexity === 'low') specs.cellCount = 9;
-    else if (complexity === 'medium') specs.cellCount = 11;
-    else specs.cellCount = 13;
+    if (complexity === 'low') specs.cellCount = 11;
+    else if (complexity === 'medium') specs.cellCount = 14;
+    else specs.cellCount = 16;
   }
 
   // Set wall width to a constant of exactly 2.0 mm across all profiles
