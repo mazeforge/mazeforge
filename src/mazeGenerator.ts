@@ -134,8 +134,13 @@ export function generateMaze(
   let bestGrid: MazeGrid | null = null;
   let bestScore = -Infinity;
 
-  // Running 600 iterations lets us scan for an extremely winded, difficult path with minimal border dead ends
-  const totalTrials = 600;
+  // Dynamically scale trials to guarantee immediate responsiveness (< 50ms total execution)
+  // while finding highly optimized paths:
+  // - Small (<= 36 cells): 120 trials
+  // - Medium (<= 64 cells): 80 trials
+  // - Large (<= 144 cells): 45 trials
+  // - Ultra (>= 145 cells): 20 trials
+  const totalTrials = totalCells <= 36 ? 120 : (totalCells <= 64 ? 80 : (totalCells <= 144 ? 45 : 20));
 
   for (let attempt = 0; attempt < totalTrials; attempt++) {
     // Initialize wall matrices (all walls intact)
@@ -346,16 +351,12 @@ export function generateMaze(
     const averageBranchDepth = branchDepths.length > 0 ? branchDepths.reduce((a, b) => a + b, 0) / branchDepths.length : 0;
     const maxBranchDepth = branchDepths.length > 0 ? Math.max(...branchDepths) : 0;
 
-    // Scoring metric: We want maximum start-to-finish pathLength, maximum winding turns, zero border wall fingers,
-    // minimal borderDeadEnds, and longer misleading dead-end paths!
-    // We heavily multiply pathLength to prioritize making the solution path as long as possible.
-    let difficultyWeight = (pathLength * 5000) + (turns * 200) + (averageBranchDepth * 450) + (maxBranchDepth * 200);
+    // Use a soft, continuous difficulty metric that rewards longer path coverage non-linearly
+    const pathRatio = pathLength / totalCells;
+    const ratioFactor = Math.pow(pathRatio, 2.5); // Highly reward high percentages of board coverage
+    const difficultyWeight = (ratioFactor * 25000) + (turns * 180) + (averageBranchDepth * 300) + (maxBranchDepth * 150);
     
-    // Dynamically calculate target path length ratio (85% on small boards, down to 72% on massive boards)
-    const minLengthRatio = totalCells <= 36 ? 0.85 : (totalCells <= 64 ? 0.80 : (totalCells <= 100 ? 0.75 : 0.72));
-    if (pathLength < totalCells * minLengthRatio) {
-      difficultyWeight -= 800000;
-    }
+    // Penalize fingers and border dead ends
     const score = difficultyWeight - (borderWallFingers * 2000) - (borderDeadEnds * 150);
 
     if (score > bestScore) {
@@ -370,8 +371,8 @@ export function generateMaze(
       };
     }
 
-    // Early exit if we find an exceptionally winding, perfect finger-free path covering at least 92% of the board
-    if (borderWallFingers === 0 && borderDeadEnds === 0 && pathLength >= Math.floor(totalCells * 0.92)) {
+    // Early exit if we find an exceptionally winding, perfect finger-free path covering at least 82% of the board
+    if (borderWallFingers === 0 && borderDeadEnds === 0 && pathLength >= Math.floor(totalCells * 0.82)) {
       break;
     }
   }
@@ -471,42 +472,59 @@ export function generateMaze(
 // Complete Solver using BFS to find optimal solution path
 export function solveMaze(grid: MazeGrid): { r: number; c: number }[] {
   const { rows, cols, verticalWalls, horizontalWalls, start, finish } = grid;
-  const queue: { r: number; c: number; path: { r: number; c: number }[] }[] = [];
+  const queue: { r: number; c: number }[] = [];
+  const parent = Array.from({ length: rows }, () => new Array<{ r: number; c: number } | null>(cols).fill(null));
   const visited = Array.from({ length: rows }, () => new Array(cols).fill(false));
 
-  queue.push({ ...start, path: [start] });
+  queue.push(start);
   visited[start.r][start.c] = true;
 
+  let found = false;
   while (queue.length > 0) {
     const curr = queue.shift()!;
     if (curr.r === finish.r && curr.c === finish.c) {
-      return curr.path;
+      found = true;
+      break;
     }
 
+    const { r, c } = curr;
     // Neighbors we can reach
     // Up
-    if (curr.r > 0 && !horizontalWalls[curr.r - 1][curr.c] && !visited[curr.r - 1][curr.c]) {
-      visited[curr.r - 1][curr.c] = true;
-      queue.push({ r: curr.r - 1, c: curr.c, path: [...curr.path, { r: curr.r - 1, c: curr.c }] });
+    if (r > 0 && !horizontalWalls[r - 1][c] && !visited[r - 1][c]) {
+      visited[r - 1][c] = true;
+      parent[r - 1][c] = curr;
+      queue.push({ r: r - 1, c });
     }
     // Down
-    if (curr.r < rows - 1 && !horizontalWalls[curr.r][curr.c] && !visited[curr.r + 1][curr.c]) {
-      visited[curr.r + 1][curr.c] = true;
-      queue.push({ r: curr.r + 1, c: curr.c, path: [...curr.path, { r: curr.r + 1, c: curr.c }] });
+    if (r < rows - 1 && !horizontalWalls[r][c] && !visited[r + 1][c]) {
+      visited[r + 1][c] = true;
+      parent[r + 1][c] = curr;
+      queue.push({ r: r + 1, c });
     }
     // Left
-    if (curr.c > 0 && !verticalWalls[curr.r][curr.c - 1] && !visited[curr.r][curr.c - 1]) {
-      visited[curr.r][curr.c - 1] = true;
-      queue.push({ r: curr.r, c: curr.c - 1, path: [...curr.path, { r: curr.r, c: curr.c - 1 }] });
+    if (c > 0 && !verticalWalls[r][c - 1] && !visited[r][c - 1]) {
+      visited[r][c - 1] = true;
+      parent[r][c - 1] = curr;
+      queue.push({ r, c: c - 1 });
     }
     // Right
-    if (curr.c < cols - 1 && !verticalWalls[curr.r][curr.c] && !visited[curr.r][curr.c + 1]) {
-      visited[curr.r][curr.c + 1] = true;
-      queue.push({ r: curr.r, c: curr.c + 1, path: [...curr.path, { r: curr.r, c: curr.c + 1 }] });
+    if (c < cols - 1 && !verticalWalls[r][c] && !visited[r][c + 1]) {
+      visited[r][c + 1] = true;
+      parent[r][c + 1] = curr;
+      queue.push({ r, c: c + 1 });
     }
   }
 
-  return []; // Unsolvable (should not happen with our generator)
+  if (!found) return [];
+
+  // Reconstruct path
+  const path: { r: number; c: number }[] = [];
+  let curr: { r: number; c: number } | null = finish;
+  while (curr !== null) {
+    path.push(curr);
+    curr = parent[curr.r][curr.c];
+  }
+  return path.reverse();
 }
 
 // Calculate difficulty analytics
